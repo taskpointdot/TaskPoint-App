@@ -1,0 +1,141 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+    // A user is an admin iff they have a document in `admins`. get()/exists()
+    // inside rules bypass rules themselves, so this doesn't recurse.
+    // Every `|| isAdmin()` below is purely additive — no permission that the
+    // seeker/provider app already relied on was narrowed to make the admin
+    // dashboard work.
+    function isAdmin() {
+      return isSignedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    // The admin allow-list itself, checked by AdminAuthService in
+    // taskpoint_admin/. Without this block the collection fell under no rule
+    // at all, so it was denied by default — which meant admin sign-in could
+    // never get past its allow-list check and every login failed with
+    // permission-denied.
+    //
+    // Readable by the admin it describes (so sign-in can verify itself) and
+    // by other admins (so the Users module can show who has access).
+    // Never writable from a client: add admins in the Firebase console, so
+    // compromising one admin account can't mint more.
+    match /admins/{uid} {
+      allow read: if isOwner(uid) || isAdmin();
+      allow write: if false;
+    }
+
+    match /categories/{id} {
+      allow read: if isSignedIn();
+      // Admins manage the service taxonomy from the Categories module.
+      allow write: if isAdmin();
+      // One-time client-side seed (see CategoriesService.seedIfEmpty): any
+      // signed-in user may create categories only until the `_seeded`
+      // marker doc exists, which that same seed call writes atomically in
+      // the same batch — so exactly one seed ever succeeds, from whichever
+      // device/user gets there first. After that, categories are
+      // effectively admin/console-managed.
+      allow create: if isSignedIn() && !exists(/databases/$(database)/documents/categories/_seeded);
+      allow update, delete: if isAdmin();
+    }
+
+    match /users/{uid} {
+      allow read: if isSignedIn();
+      allow create: if isOwner(uid);
+      // Admins update `cnicStatus` when approving/rejecting a CNIC
+      // submission, `walletBalance` when confirming a top-up, and
+      // `suspended` from the Users module.
+      allow update: if isOwner(uid) || isAdmin();
+      allow delete: if false;
+
+      match /emergencyContacts/{id} {
+        allow read, write: if isOwner(uid);
+      }
+      match /notifications/{id} {
+        allow read: if isOwner(uid);
+        // Any signed-in user can create a notification for someone else
+        // (e.g. a new bid notifying the seeker) but only the owner can
+        // mark it read or delete it.
+        allow create: if isSignedIn();
+        allow update, delete: if isOwner(uid);
+      }
+      match /devices/{id} {
+        allow read, write: if isOwner(uid);
+      }
+    }
+
+    match /jobs/{jobId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.seekerId == request.auth.uid;
+      allow update: if (isSignedIn() &&
+        (resource.data.seekerId == request.auth.uid || resource.data.acceptedWorkerId == request.auth.uid)) || isAdmin();
+      allow delete: if false;
+
+      match /bids/{bidId} {
+        allow read: if isSignedIn();
+        allow create: if isSignedIn() && request.resource.data.workerId == request.auth.uid;
+        allow update: if isSignedIn() &&
+          (resource.data.workerId == request.auth.uid ||
+           get(/databases/$(database)/documents/jobs/$(jobId)).data.seekerId == request.auth.uid);
+        allow delete: if false;
+      }
+      match /messages/{id} {
+        allow read: if isSignedIn();
+        allow create: if isSignedIn() && request.resource.data.senderId == request.auth.uid;
+        allow update, delete: if false;
+      }
+    }
+
+    match /reviews/{id} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.seekerId == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    match /transactions/{id} {
+      allow read: if (isSignedIn() && resource.data.userId == request.auth.uid) || isAdmin();
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      // Admins flip a pending top-up's ledger row to confirmed/rejected.
+      allow update: if isAdmin();
+      allow delete: if false;
+    }
+
+    match /wallet_topups/{id} {
+      allow read: if (isSignedIn() && resource.data.userId == request.auth.uid) || isAdmin();
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      // Confirming a manual EasyPaisa/JazzCash transfer is exactly what the
+      // admin Wallet Top-Ups module does.
+      allow update: if isAdmin();
+      allow delete: if false;
+    }
+
+    match /sos_logs/{id} {
+      allow read: if (isSignedIn() && resource.data.userId == request.auth.uid) || isAdmin();
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow update: if (isSignedIn() && resource.data.userId == request.auth.uid) || isAdmin();
+      allow delete: if false;
+    }
+
+    match /reports/{id} {
+      allow read: if (isSignedIn() && resource.data.reporterId == request.auth.uid) || isAdmin();
+      allow create: if isSignedIn() && request.resource.data.reporterId == request.auth.uid;
+      // Resolve / dismiss from the admin Reports module.
+      allow update: if isAdmin();
+      allow delete: if false;
+    }
+
+    match /data_export_requests/{id} {
+      allow read: if (isSignedIn() && resource.data.userId == request.auth.uid) || isAdmin();
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow update: if isAdmin();
+      allow delete: if false;
+    }
+  }
+}

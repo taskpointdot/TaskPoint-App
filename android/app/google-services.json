@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "871951039337",
+    "project_id": "taskpoint-8aba0",
+    "storage_bucket": "taskpoint-8aba0.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:871951039337:android:b7797438d085b7cc575bf8",
+        "android_client_info": {
+          "package_name": "com.example.taskpoint"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "871951039337-v7kiqf07nfpsakt2v1si3pkq8hpi5sen.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDUQcnUVjfx5GNO76BtV8UcNphV0AlINi0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "871951039337-v7kiqf07nfpsakt2v1si3pkq8hpi5sen.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

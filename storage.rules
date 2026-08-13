@@ -1,0 +1,44 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    // CNIC front/back photos, only the owner can upload, only the owner
+    // (and, informally, whoever reviews it in the Firebase console) can read.
+    match /cnic/{uid}/{fileName} {
+      allow read: if isOwner(uid);
+      allow write: if isOwner(uid) && request.resource.size < 10 * 1024 * 1024;
+    }
+
+    // Manual EasyPaisa/JazzCash transfer proof screenshots.
+    match /wallet_topups/{uid}/{fileName} {
+      allow read: if isOwner(uid);
+      allow write: if isOwner(uid) && request.resource.size < 10 * 1024 * 1024;
+    }
+
+    match /profile_photos/{uid}/{fileName} {
+      allow read: if isSignedIn();
+      allow write: if isOwner(uid) && request.resource.size < 10 * 1024 * 1024;
+    }
+
+    // Before/after job completion photos — any signed-in user can view
+    // (both parties need to see them), only the uploading worker writes.
+    match /job_photos/{jobId}/{fileName} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && request.resource.size < 10 * 1024 * 1024;
+    }
+
+    // "Report a Problem" evidence photos — only the reporter can read/write
+    // their own.
+    match /reports/{uid}/{fileName} {
+      allow read: if isOwner(uid);
+      allow write: if isOwner(uid) && request.resource.size < 10 * 1024 * 1024;
+    }
+  }
+}
